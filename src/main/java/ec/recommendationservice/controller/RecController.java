@@ -5,11 +5,14 @@ import ec.recommendationservice.service.RecommendationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,5 +66,34 @@ public class RecController {
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
+    //*: ● Exposes an endpoint that will return a descending sorted list of all the cryptos,
+    //*: comparing the normalized range (i.e. (max-min)/min)
+
+    @GetMapping("/coins/normalized-range")
+    public ResponseEntity<List<Map<String, Object>>> getNormalizedRangeForAllCoins() {
+        List<Map<String, Object>> normalizedRanges = recommendationService.getNormalizedRangeForAllCoins();
+        return ResponseEntity.ok(normalizedRanges);
+    }
+
+    //*: ● Calculates oldest/newest/min/max for each crypto for the whole month
+    @GetMapping("/coins/values")
+    public ResponseEntity<List<Map<String, Object>>> getMonthlySummaryForAllCoins() {
+        List<Map<String, Object>> monthlySummary = recommendationService.getMonthlySummaryForAllCoins();
+        return ResponseEntity.ok(monthlySummary);
+    }
+
+    //* Exposes an endpoint that will return the crypto with the highest normalized range for a
+    //* specific day in the month
+    @GetMapping("/coins/highest-normalized-range")
+    public ResponseEntity<Map<String, Object>> getHighestNormalizedRangeForDate(
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        Optional<Map<String, Object>> highestNormalizedRange =
+                recommendationService.getCryptoWithHighestNormalizedRangeForDate(date);
+
+        return highestNormalizedRange
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
 
 }

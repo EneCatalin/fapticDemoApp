@@ -15,9 +15,11 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class RecommendationService {
@@ -85,4 +87,83 @@ public class RecommendationService {
 
         return highestPrices;
     }
+
+
+    public List<Map<String, Object>> getNormalizedRangeForAllCoins() {
+        List<Object[]> results = coinRepository.findMaxAndMinPricesForAllSymbols();
+
+        // Calculate normalized range and prepare the results
+        List<Map<String, Object>> normalizedRanges = new ArrayList<>();
+        for (Object[] result : results) {
+            String symbol = (String) result[0];
+            Double maxPrice = (Double) result[1];
+            Double minPrice = (Double) result[2];
+
+            if (minPrice != null && minPrice > 0) {
+                double normalizedRange = (maxPrice - minPrice) / minPrice;
+
+                normalizedRanges.add(Map.of(
+                        "symbol", symbol,
+                        "normalizedRange", normalizedRange
+                ));
+            }
+        }
+
+        // Sort by normalized range in descending order
+        return normalizedRanges.stream()
+                .sorted((o1, o2) -> Double.compare((Double) o2.get("normalizedRange"), (Double) o1.get("normalizedRange")))
+                .collect(Collectors.toList());
+    }
+
+    public List<Map<String, Object>> getMonthlySummaryForAllCoins() {
+        List<Object[]> results = coinRepository.findOldestNewestMinMaxPricesForAllSymbols();
+        List<Map<String, Object>> summaryList = new ArrayList<>();
+
+        for (Object[] result : results) {
+            String symbol = (String) result[0];
+            LocalDateTime oldestTimestamp = (LocalDateTime) result[1];
+            LocalDateTime newestTimestamp = (LocalDateTime) result[2];
+            Double minPrice = (Double) result[3];
+            Double maxPrice = (Double) result[4];
+
+            // Format response for each crypto
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("symbol", symbol);
+            summary.put("oldest", oldestTimestamp);
+            summary.put("newest", newestTimestamp);
+            summary.put("min", minPrice);
+            summary.put("max", maxPrice);
+
+            summaryList.add(summary);
+        }
+
+        return summaryList;
+    }
+
+    public Optional<Map<String, Object>> getCryptoWithHighestNormalizedRangeForDate(LocalDate date) {
+        List<Object[]> results = coinRepository.findMaxAndMinPricesBySymbolForDate(date);
+
+        Map<String, Object> highestNormalizedRangeCrypto = null;
+        double highestNormalizedRange = -1;
+
+        for (Object[] result : results) {
+            String symbol = (String) result[0];
+            Double maxPrice = (Double) result[1];
+            Double minPrice = (Double) result[2];
+
+            if (minPrice != null && minPrice > 0) {
+                double normalizedRange = (maxPrice - minPrice) / minPrice;
+
+                if (normalizedRange > highestNormalizedRange) {
+                    highestNormalizedRange = normalizedRange;
+                    highestNormalizedRangeCrypto = new HashMap<>();
+                    highestNormalizedRangeCrypto.put("symbol", symbol);
+                    highestNormalizedRangeCrypto.put("normalizedRange", normalizedRange);
+                }
+            }
+        }
+
+        return Optional.ofNullable(highestNormalizedRangeCrypto);
+    }
+
 }
