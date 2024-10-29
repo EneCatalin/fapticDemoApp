@@ -9,9 +9,8 @@
 * In a normal project I would implement exception handling using @ControllerAdvice but it seemed too much for a small
   demo
 * I dealt with "new coins" using a whitelist found in application.properties. Normally I would put that in a database.
-  ** I would probably also cache some common results for performance reasons, such as the normalized range for the
-  most**
-  **  popular coins in the last 24 hours, and maybe for the last week/month/year.**
+* I would probably also cache some common results for performance reasons, such as the normalized range for the most
+* popular coins in the last 24 hours, and maybe for the last week/month/year.
 * The project uses a gateway for rate limiting. I had problems with postman testing but it can be done from curl with
   this script:
 * ```` for i in {1..11}; do
