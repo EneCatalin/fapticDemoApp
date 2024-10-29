@@ -32,22 +32,7 @@ public class RecommendationService {
         this.whitelist = whitelist;
     }
 
-    public void readData() {
-        logger.info("Data read started");
-
-        File directory = new File(directoryPath);
-        File[] csvFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
-        if (csvFiles == null || csvFiles.length == 0) {
-            logger.warn("No CSV files found in directory: {}", directoryPath);
-            return;
-        }
-
-        Arrays.stream(csvFiles).forEach(this::parseCsvFile);
-
-        logger.info("Data read completed for all files");
-    }
-
-    private void parseCsvFile(File file) {
+    void parseCsvFile(File file) {
         logger.info("Reading file: {}", file.getName());
         CsvMapper csvMapper = new CsvMapper();
         CsvSchema schema = CsvSchema.emptySchema().withHeader();
@@ -67,10 +52,28 @@ public class RecommendationService {
 
         } catch (IOException e) {
             logger.error("Error reading CSV file: {}", file.getName(), e);
+            throw new RuntimeException("Error reading CSV file: " + file.getName(), e);
         }
     }
 
-    private Coin transformToCoin(CryptoRecord record) {
+
+    public void readData() {
+        logger.info("Data read started");
+
+        File directory = new File(directoryPath);
+        File[] csvFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
+        if (csvFiles == null || csvFiles.length == 0) {
+            logger.warn("No CSV files found in directory: {}", directoryPath);
+            throw new IllegalArgumentException("No CSV files found in directory: " + directoryPath);
+        }
+
+        Arrays.stream(csvFiles).forEach(this::parseCsvFile);
+
+        logger.info("Data read completed for all files");
+    }
+
+
+    Coin transformToCoin(CryptoRecord record) {
         if (record.symbol().isEmpty() || record.timestamp().isEmpty() || record.price().isEmpty()) {
             logger.error("Invalid record: {}", record);
             throw new IllegalArgumentException("Invalid record: " + record);
@@ -103,33 +106,7 @@ public class RecommendationService {
     private double calculateNormalizedRange(Double maxPrice, Double minPrice) {
         return (maxPrice - minPrice) / minPrice;
     }
-
-    public List<Map<String, Object>> getNormalizedRangeForAllCoins() {
-        List<Object[]> results = coinRepository.findMaxAndMinPricesForAllSymbols();
-
-        // Calculate normalized range and prepare the results
-        List<Map<String, Object>> normalizedRanges = new ArrayList<>();
-        for (Object[] result : results) {
-            String symbol = (String) result[0];
-            Double maxPrice = (Double) result[1];
-            Double minPrice = (Double) result[2];
-
-            if (minPrice != null && minPrice > 0) {
-                double normalizedRange = calculateNormalizedRange(maxPrice, minPrice);
-
-                normalizedRanges.add(Map.of(
-                        "symbol", symbol,
-                        "normalizedRange", normalizedRange
-                ));
-            }
-        }
-
-        // Sort by normalized range in descending order
-        return normalizedRanges.stream()
-                .sorted((o1, o2) -> Double.compare((Double) o2.get("normalizedRange"), (Double) o1.get("normalizedRange")))
-                .collect(Collectors.toList());
-    }
-
+    
     public List<Map<String, Object>> getMonthlySummaryForAllCoins() {
         List<Object[]> results = coinRepository.findOldestNewestMinMaxPricesForAllSymbols();
         List<Map<String, Object>> summaryList = new ArrayList<>();
