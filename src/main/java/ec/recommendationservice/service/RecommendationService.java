@@ -8,67 +8,79 @@ import ec.recommendationservice.entity.Coin;
 import ec.recommendationservice.repository.CoinRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class RecommendationService {
     private static final Logger logger = LoggerFactory.getLogger(RecommendationService.class);
-    @Value("${coin.data.directory-path}")
-    private String DIRECTORY_PATH;
+    private final String directoryPath;
+    private final CoinRepository coinRepository;
+    private final Set<String> whitelist;
 
-
-    @Autowired
-    private CoinRepository coinRepository;
-
+    public RecommendationService(@Value("${coin.data.directory-path}") String directoryPath,
+                                 CoinRepository coinRepository,
+                                 @Value("${coin.whitelist}") Set<String> whitelist) {
+        this.directoryPath = directoryPath;
+        this.coinRepository = coinRepository;
+        this.whitelist = whitelist;
+    }
 
     public void readData() {
         logger.info("Data read started");
 
-        File directory = new File(DIRECTORY_PATH);
-
-        CsvSchema schema = CsvSchema.emptySchema().withHeader();
-        CsvMapper csvMapper = new CsvMapper();
-
+        File directory = new File(directoryPath);
         File[] csvFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
         if (csvFiles == null || csvFiles.length == 0) {
-            logger.warn("No CSV files found in directory: {}", DIRECTORY_PATH);
+            logger.warn("No CSV files found in directory: {}", directoryPath);
             return;
         }
 
-        Arrays.stream(csvFiles).forEach(file -> {
-            logger.info("Reading file: {}", file.getName());
-            try (MappingIterator<CryptoRecord> iterator = csvMapper.readerFor(CryptoRecord.class)
-                    .with(schema)
-                    .<CryptoRecord>readValues(file)) {
-
-                List<CryptoRecord> records = iterator.readAll();
-                records.forEach(record -> {
-                    Coin coin = new Coin();
-                    coin.setSymbol(record.symbol());
-                    coin.setTimestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(record.timestamp())), ZoneId.systemDefault()));
-                    coin.setPrice(Double.parseDouble(record.price()));
-
-                    // Save each coin to the database
-                    coinRepository.save(coin);
-                });
-
-            } catch (IOException e) {
-                logger.error("Error reading CSV file: {}", file.getName(), e);
-            }
-        });
+        Arrays.stream(csvFiles).forEach(this::parseCsvFile);
 
         logger.info("Data read completed for all files");
+    }
+
+    private void parseCsvFile(File file) {
+        logger.info("Reading file: {}", file.getName());
+        CsvMapper csvMapper = new CsvMapper();
+        CsvSchema schema = CsvSchema.emptySchema().withHeader();
+
+        try (MappingIterator<CryptoRecord> iterator = csvMapper.readerFor(CryptoRecord.class)
+                .with(schema)
+                .<CryptoRecord>readValues(file)) {
+
+            List<CryptoRecord> records = iterator.readAll();
+            records.forEach(record -> {
+                if (whitelist.contains(record.symbol())) {
+                    coinRepository.save(transformToCoin(record));
+                } else {
+                    logger.warn("Skipping unsupported crypto symbol: {}", record.symbol());
+                }
+            });
+
+        } catch (IOException e) {
+            logger.error("Error reading CSV file: {}", file.getName(), e);
+        }
+    }
+
+    private Coin transformToCoin(CryptoRecord record) {
+        if (record.symbol().isEmpty() || record.timestamp().isEmpty() || record.price().isEmpty()) {
+            logger.error("Invalid record: {}", record);
+            throw new IllegalArgumentException("Invalid record: " + record);
+        }
+
+        Coin coin = new Coin();
+        coin.setSymbol(record.symbol());
+        coin.setTimestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(record.timestamp())), ZoneId.systemDefault()));
+        coin.setPrice(Double.parseDouble(record.price()));
+        return coin;
     }
 
     public Optional<Double> getHighestPriceBySymbol(String symbol) {
@@ -88,6 +100,9 @@ public class RecommendationService {
         return highestPrices;
     }
 
+    private double calculateNormalizedRange(Double maxPrice, Double minPrice) {
+        return (maxPrice - minPrice) / minPrice;
+    }
 
     public List<Map<String, Object>> getNormalizedRangeForAllCoins() {
         List<Object[]> results = coinRepository.findMaxAndMinPricesForAllSymbols();
@@ -100,7 +115,7 @@ public class RecommendationService {
             Double minPrice = (Double) result[2];
 
             if (minPrice != null && minPrice > 0) {
-                double normalizedRange = (maxPrice - minPrice) / minPrice;
+                double normalizedRange = calculateNormalizedRange(maxPrice, minPrice);
 
                 normalizedRanges.add(Map.of(
                         "symbol", symbol,
@@ -140,30 +155,37 @@ public class RecommendationService {
         return summaryList;
     }
 
+    private Map<String, Object> convertToNormalizedRangeMap(Object[] result) {
+        String symbol = (String) result[0];
+        Double maxPrice = (Double) result[1];
+        Double minPrice = (Double) result[2];
+        double normalizedRange = calculateNormalizedRange(maxPrice, minPrice);
+
+        Map<String, Object> normalizedRangeMap = new HashMap<>();
+        normalizedRangeMap.put("symbol", symbol);
+        normalizedRangeMap.put("normalizedRange", normalizedRange);
+        return normalizedRangeMap;
+    }
+
+
     public Optional<Map<String, Object>> getCryptoWithHighestNormalizedRangeForDate(LocalDate date) {
-        List<Object[]> results = coinRepository.findMaxAndMinPricesBySymbolForDate(date);
+        return coinRepository.findMaxAndMinPricesBySymbolForDate(date).stream()
+                .filter(result -> result[2] != null && (Double) result[2] > 0) // Filter out null or zero min prices
+                .map(this::convertToNormalizedRangeMap)
+                .max(Comparator.comparingDouble(result -> (Double) result.get("normalizedRange"))); // Find max normalized range
+    }
 
-        Map<String, Object> highestNormalizedRangeCrypto = null;
-        double highestNormalizedRange = -1;
+    public List<Map<String, Object>> getNormalizedRangeForDateRange(LocalDate startDate, LocalDate endDate) {
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
 
-        for (Object[] result : results) {
-            String symbol = (String) result[0];
-            Double maxPrice = (Double) result[1];
-            Double minPrice = (Double) result[2];
+        List<Object[]> results = coinRepository.findMaxAndMinPricesBySymbolInDateRange(startDateTime, endDateTime);
 
-            if (minPrice != null && minPrice > 0) {
-                double normalizedRange = (maxPrice - minPrice) / minPrice;
-
-                if (normalizedRange > highestNormalizedRange) {
-                    highestNormalizedRange = normalizedRange;
-                    highestNormalizedRangeCrypto = new HashMap<>();
-                    highestNormalizedRangeCrypto.put("symbol", symbol);
-                    highestNormalizedRangeCrypto.put("normalizedRange", normalizedRange);
-                }
-            }
-        }
-
-        return Optional.ofNullable(highestNormalizedRangeCrypto);
+        return results.stream()
+                .filter(result -> result[2] != null && (Double) result[2] > 0)
+                .map(this::convertToNormalizedRangeMap)
+                .sorted((o1, o2) -> Double.compare((Double) o2.get("normalizedRange"), (Double) o1.get("normalizedRange")))
+                .collect(Collectors.toList());
     }
 
 }

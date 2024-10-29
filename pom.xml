@@ -65,8 +65,8 @@
         <!--ADDED by me for documentation-->
         <dependency>
             <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-ui</artifactId>
-            <version>1.8.0</version>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.5.0</version>
         </dependency>
         <!--  For the csv files-->
         <!--DOCS HERE: https://github.com/FasterXML/jackson-dataformats-text-->

@@ -7,11 +7,22 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 
 public interface CoinRepository extends JpaRepository<Coin, CoinId> {
+
+    @Query("""
+                SELECT c.symbol, MAX(c.price), MIN(c.price)
+                FROM Coin c
+                WHERE c.timestamp BETWEEN :startDate AND :endDate
+                GROUP BY c.symbol
+            """)
+    List<Object[]> findMaxAndMinPricesBySymbolInDateRange(@Param("startDate") LocalDateTime startDate,
+                                                          @Param("endDate") LocalDateTime endDate);
+
     @Query("""
                 SELECT c.symbol, MAX(c.price), MIN(c.price)
                 FROM Coin c 
