@@ -1,0 +1,284 @@
+
+
+
+<!DOCTYPE html>
+<html id="htmlId">
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"> 
+  <title>Coverage Report > RecommendationService</title>
+  <style type="text/css">
+    @import "../../css/coverage.css";
+    @import "../../css/idea.min.css";
+  </style>
+  <script type="text/javascript" src="../../js/highlight.min.js"></script>
+  <script type="text/javascript" src="../../js/highlightjs-line-numbers.min.js"></script>
+</head>
+
+<body>
+<div class="content">
+<div class="breadCrumbs">
+Current scope:     <a href="../../index.html">all classes</a>
+    <span class="separator">|</span>
+    <a href="../index.html">ec.recommendationservice.service</a>
+</div>
+
+<h1>Coverage Summary for Class: RecommendationService (ec.recommendationservice.service)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Branch, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">RecommendationService</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (1/1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    23.1%
+  </span>
+  <span class="absValue">
+    (3/13)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    7.1%
+  </span>
+  <span class="absValue">
+    (2/28)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    13.8%
+  </span>
+  <span class="absValue">
+    (11/80)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<pre>
+<code class="sourceCode" id="sourceCode">&nbsp;package ec.recommendationservice.service;
+&nbsp;
+&nbsp;import com.fasterxml.jackson.databind.MappingIterator;
+&nbsp;import com.fasterxml.jackson.dataformat.csv.CsvMapper;
+&nbsp;import com.fasterxml.jackson.dataformat.csv.CsvSchema;
+&nbsp;import ec.recommendationservice.dto.CryptoRecord;
+&nbsp;import ec.recommendationservice.entity.Coin;
+&nbsp;import ec.recommendationservice.repository.CoinRepository;
+&nbsp;import org.slf4j.Logger;
+&nbsp;import org.slf4j.LoggerFactory;
+&nbsp;import org.springframework.beans.factory.annotation.Value;
+&nbsp;import org.springframework.stereotype.Service;
+&nbsp;
+&nbsp;import java.io.File;
+&nbsp;import java.io.IOException;
+&nbsp;import java.time.*;
+&nbsp;import java.util.*;
+&nbsp;import java.util.stream.Collectors;
+&nbsp;
+&nbsp;@Service
+&nbsp;public class RecommendationService {
+<b class="fc">&nbsp;    private static final Logger logger = LoggerFactory.getLogger(RecommendationService.class);</b>
+&nbsp;    private final String directoryPath;
+&nbsp;    private final CoinRepository coinRepository;
+&nbsp;    private final Set&lt;String&gt; whitelist;
+&nbsp;
+&nbsp;    public RecommendationService(@Value(&quot;${coin.data.directory-path}&quot;) String directoryPath,
+&nbsp;                                 CoinRepository coinRepository,
+<b class="fc">&nbsp;                                 @Value(&quot;${coin.whitelist}&quot;) Set&lt;String&gt; whitelist) {</b>
+<b class="fc">&nbsp;        this.directoryPath = directoryPath;</b>
+<b class="fc">&nbsp;        this.coinRepository = coinRepository;</b>
+<b class="fc">&nbsp;        this.whitelist = whitelist;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    void parseCsvFile(File file) {
+<b class="nc">&nbsp;        logger.info(&quot;Reading file: {}&quot;, file.getName());</b>
+<b class="nc">&nbsp;        CsvMapper csvMapper = new CsvMapper();</b>
+<b class="nc">&nbsp;        CsvSchema schema = CsvSchema.emptySchema().withHeader();</b>
+&nbsp;
+<b class="nc">&nbsp;        try (MappingIterator&lt;CryptoRecord&gt; iterator = csvMapper.readerFor(CryptoRecord.class)</b>
+<b class="nc">&nbsp;                .with(schema)</b>
+<b class="nc">&nbsp;                .&lt;CryptoRecord&gt;readValues(file)) {</b>
+&nbsp;
+<b class="nc">&nbsp;            List&lt;CryptoRecord&gt; records = iterator.readAll();</b>
+<b class="nc">&nbsp;            records.forEach(record -&gt; {</b>
+<b class="nc">&nbsp;                if (whitelist.contains(record.symbol())) {</b>
+<b class="nc">&nbsp;                    coinRepository.save(transformToCoin(record));</b>
+&nbsp;                } else {
+<b class="nc">&nbsp;                    logger.warn(&quot;Skipping unsupported crypto symbol: {}&quot;, record.symbol());</b>
+&nbsp;                }
+&nbsp;            });
+&nbsp;
+<b class="nc">&nbsp;        } catch (IOException e) {</b>
+<b class="nc">&nbsp;            logger.error(&quot;Error reading CSV file: {}&quot;, file.getName(), e);</b>
+<b class="nc">&nbsp;            throw new RuntimeException(&quot;Error reading CSV file: &quot; + file.getName(), e);</b>
+&nbsp;        }
+&nbsp;    }
+&nbsp;
+&nbsp;
+&nbsp;    public void readData() {
+<b class="fc">&nbsp;        logger.info(&quot;Data read started&quot;);</b>
+&nbsp;
+<b class="fc">&nbsp;        File directory = new File(directoryPath);</b>
+<b class="fc">&nbsp;        File[] csvFiles = directory.listFiles((dir, name) -&gt; name.toLowerCase().endsWith(&quot;.csv&quot;));</b>
+<b class="pc">&nbsp;        if (csvFiles == null || csvFiles.length == 0) {</b>
+<b class="fc">&nbsp;            logger.warn(&quot;No CSV files found in directory: {}&quot;, directoryPath);</b>
+<b class="fc">&nbsp;            throw new IllegalArgumentException(&quot;No CSV files found in directory: &quot; + directoryPath);</b>
+&nbsp;        }
+&nbsp;
+<b class="nc">&nbsp;        Arrays.stream(csvFiles).forEach(this::parseCsvFile);</b>
+&nbsp;
+<b class="nc">&nbsp;        logger.info(&quot;Data read completed for all files&quot;);</b>
+&nbsp;    }
+&nbsp;
+&nbsp;
+&nbsp;    Coin transformToCoin(CryptoRecord record) {
+<b class="nc">&nbsp;        if (record.symbol().isEmpty() || record.timestamp().isEmpty() || record.price().isEmpty()) {</b>
+<b class="nc">&nbsp;            logger.error(&quot;Invalid record: {}&quot;, record);</b>
+<b class="nc">&nbsp;            throw new IllegalArgumentException(&quot;Invalid record: &quot; + record);</b>
+&nbsp;        }
+&nbsp;
+<b class="nc">&nbsp;        Coin coin = new Coin();</b>
+<b class="nc">&nbsp;        coin.setSymbol(record.symbol());</b>
+<b class="nc">&nbsp;        coin.setTimestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(record.timestamp())), ZoneId.systemDefault()));</b>
+<b class="nc">&nbsp;        coin.setPrice(Double.parseDouble(record.price()));</b>
+<b class="nc">&nbsp;        return coin;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    public Optional&lt;Double&gt; getHighestPriceBySymbol(String symbol) {
+<b class="nc">&nbsp;        return coinRepository.findHighestPriceBySymbol(symbol);</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    public Map&lt;String, Double&gt; getHighestPriceForEachCoin() {
+<b class="nc">&nbsp;        List&lt;Object[]&gt; results = coinRepository.findHighestPriceForEachCoin();</b>
+<b class="nc">&nbsp;        Map&lt;String, Double&gt; highestPrices = new HashMap&lt;&gt;();</b>
+&nbsp;
+<b class="nc">&nbsp;        for (Object[] result : results) {</b>
+<b class="nc">&nbsp;            String symbol = (String) result[0];</b>
+<b class="nc">&nbsp;            Double price = (Double) result[1];</b>
+<b class="nc">&nbsp;            highestPrices.put(symbol, price);</b>
+&nbsp;        }
+&nbsp;
+<b class="nc">&nbsp;        return highestPrices;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    private double calculateNormalizedRange(Double maxPrice, Double minPrice) {
+<b class="nc">&nbsp;        return (maxPrice - minPrice) / minPrice;</b>
+&nbsp;    }
+&nbsp;    
+&nbsp;    public List&lt;Map&lt;String, Object&gt;&gt; getMonthlySummaryForAllCoins() {
+<b class="nc">&nbsp;        List&lt;Object[]&gt; results = coinRepository.findOldestNewestMinMaxPricesForAllSymbols();</b>
+<b class="nc">&nbsp;        List&lt;Map&lt;String, Object&gt;&gt; summaryList = new ArrayList&lt;&gt;();</b>
+&nbsp;
+<b class="nc">&nbsp;        for (Object[] result : results) {</b>
+<b class="nc">&nbsp;            String symbol = (String) result[0];</b>
+<b class="nc">&nbsp;            LocalDateTime oldestTimestamp = (LocalDateTime) result[1];</b>
+<b class="nc">&nbsp;            LocalDateTime newestTimestamp = (LocalDateTime) result[2];</b>
+<b class="nc">&nbsp;            Double minPrice = (Double) result[3];</b>
+<b class="nc">&nbsp;            Double maxPrice = (Double) result[4];</b>
+&nbsp;
+&nbsp;            // Format response for each crypto
+<b class="nc">&nbsp;            Map&lt;String, Object&gt; summary = new HashMap&lt;&gt;();</b>
+<b class="nc">&nbsp;            summary.put(&quot;symbol&quot;, symbol);</b>
+<b class="nc">&nbsp;            summary.put(&quot;oldest&quot;, oldestTimestamp);</b>
+<b class="nc">&nbsp;            summary.put(&quot;newest&quot;, newestTimestamp);</b>
+<b class="nc">&nbsp;            summary.put(&quot;min&quot;, minPrice);</b>
+<b class="nc">&nbsp;            summary.put(&quot;max&quot;, maxPrice);</b>
+&nbsp;
+<b class="nc">&nbsp;            summaryList.add(summary);</b>
+&nbsp;        }
+&nbsp;
+<b class="nc">&nbsp;        return summaryList;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    private Map&lt;String, Object&gt; convertToNormalizedRangeMap(Object[] result) {
+<b class="nc">&nbsp;        String symbol = (String) result[0];</b>
+<b class="nc">&nbsp;        Double maxPrice = (Double) result[1];</b>
+<b class="nc">&nbsp;        Double minPrice = (Double) result[2];</b>
+<b class="nc">&nbsp;        double normalizedRange = calculateNormalizedRange(maxPrice, minPrice);</b>
+&nbsp;
+<b class="nc">&nbsp;        Map&lt;String, Object&gt; normalizedRangeMap = new HashMap&lt;&gt;();</b>
+<b class="nc">&nbsp;        normalizedRangeMap.put(&quot;symbol&quot;, symbol);</b>
+<b class="nc">&nbsp;        normalizedRangeMap.put(&quot;normalizedRange&quot;, normalizedRange);</b>
+<b class="nc">&nbsp;        return normalizedRangeMap;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;
+&nbsp;    public Optional&lt;Map&lt;String, Object&gt;&gt; getCryptoWithHighestNormalizedRangeForDate(LocalDate date) {
+<b class="nc">&nbsp;        return coinRepository.findMaxAndMinPricesBySymbolForDate(date).stream()</b>
+<b class="nc">&nbsp;                .filter(result -&gt; result[2] != null &amp;&amp; (Double) result[2] &gt; 0) // Filter out null or zero min prices</b>
+<b class="nc">&nbsp;                .map(this::convertToNormalizedRangeMap)</b>
+<b class="nc">&nbsp;                .max(Comparator.comparingDouble(result -&gt; (Double) result.get(&quot;normalizedRange&quot;))); // Find max normalized range</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    public List&lt;Map&lt;String, Object&gt;&gt; getNormalizedRangeForDateRange(LocalDate startDate, LocalDate endDate) {
+<b class="nc">&nbsp;        LocalDateTime startDateTime = startDate.atStartOfDay();</b>
+<b class="nc">&nbsp;        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);</b>
+&nbsp;
+<b class="nc">&nbsp;        List&lt;Object[]&gt; results = coinRepository.findMaxAndMinPricesBySymbolInDateRange(startDateTime, endDateTime);</b>
+&nbsp;
+<b class="nc">&nbsp;        return results.stream()</b>
+<b class="nc">&nbsp;                .filter(result -&gt; result[2] != null &amp;&amp; (Double) result[2] &gt; 0)</b>
+<b class="nc">&nbsp;                .map(this::convertToNormalizedRangeMap)</b>
+<b class="nc">&nbsp;                .sorted((o1, o2) -&gt; Double.compare((Double) o2.get(&quot;normalizedRange&quot;), (Double) o1.get(&quot;normalizedRange&quot;)))</b>
+<b class="nc">&nbsp;                .collect(Collectors.toList());</b>
+&nbsp;    }
+&nbsp;
+&nbsp;}
+</code>
+</pre>
+</div>
+
+<script type="text/javascript">
+(function() {
+    var msie = false, msie9 = false;
+    /*@cc_on
+      msie = true;
+      @if (@_jscript_version >= 9)
+        msie9 = true;
+      @end
+    @*/
+
+    if (!msie || msie && msie9) {
+      hljs.highlightAll()
+      hljs.initLineNumbersOnLoad();
+    }
+})();
+</script>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2024-10-29 17:44</div>
+</div>
+</body>
+</html>

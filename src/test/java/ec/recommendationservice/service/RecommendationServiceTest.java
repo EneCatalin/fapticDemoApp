@@ -315,7 +315,6 @@ public class RecommendationServiceTest {
         // Verify that the result is an empty list
         assertTrue(result.isEmpty());
     }
-    //--------------------------------
 
 
 }
